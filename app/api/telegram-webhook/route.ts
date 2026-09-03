@@ -26,6 +26,7 @@ interface PendingTransaction {
   time?: string;
   category?: string;
   type?: 'income' | 'expense';
+  wallet_name?: string;
   created_at: number; // epoch ms – for TTL cleanup
   items?: { name: string; price: number; qty: number }[];
 }
@@ -242,16 +243,18 @@ Allowed Income Categories (/in): ${ALLOWED_INCOME_CATEGORIES.join(", ")}.
 STRICT RULES:
 1. NO GUESSING: If the input is short and does not explicitly name a merchant, strictly set "merchant" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
 2. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant".
-3. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
-4. Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
+3. WALLET EXTRACTION: Check if the text contains a word matching one of the Available Wallets provided in the Input. If it does, extract it into the "wallet" field. If not, set "wallet" to null.
+4. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
+5. Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
 
-Return ONLY raw JSON: {"amount": number, "merchant": "string", "category": "string"}`;
+Return ONLY raw JSON: {"amount": number, "merchant": "string", "category": "string", "wallet": "string" | null}`;
 
 async function extractWithGeminiNLP(
   textInput: string,
-  type: 'income' | 'expense'
+  type: 'income' | 'expense',
+  walletNames: string[]
 ): Promise<PendingTransaction> {
-  const prompt = `${EXTRACTION_PROMPT_NLP}\n\nInput (${type}): ${textInput}`;
+  const prompt = `${EXTRACTION_PROMPT_NLP}\n\nAvailable Wallets: ${walletNames.join(", ")}\n\nInput (${type}): ${textInput}`;
 
   const result = await executeWithFallback(
     ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
@@ -272,6 +275,7 @@ async function extractWithGeminiNLP(
     amount: Number(parsed.amount) || 0,
     category: category,
     type: type,
+    wallet_name: parsed.wallet,
     date: new Date().toISOString().split('T')[0],
     created_at: Date.now(),
   };
@@ -505,43 +509,74 @@ export async function POST(req: Request) {
       const isIncome = message.text.startsWith('/in ');
       const textInput = message.text.replace(isIncome ? '/in ' : '/out ', '');
       
-      await sendMessage(chatId, '⏳ Sedang mengekstrak data...');
+      await sendMessage(chatId, '⏳ Sedang memproses transaksi...');
       
-      const [extractedNLP, { data: wallets }] = await Promise.all([
-        extractWithGeminiNLP(textInput, isIncome ? 'income' : 'expense'),
-        supabase
-          .from('wallets')
-          .select('id, name')
-          .order('created_at', { ascending: true })
-      ]);
+      const { data: wallets } = await supabase
+        .from('wallets')
+        .select('id, name, current_balance')
+        .order('created_at', { ascending: true });
 
       if (!wallets || wallets.length === 0) {
-        await sendMessage(chatId, '⚠️ Tidak ada dompet yang tersedia.');
+        await sendMessage(chatId, '⚠️ Tidak ada dompet yang tersedia. Tambahkan dompet di Dashboard terlebih dahulu.');
         return ok();
       }
 
-      const inlineKeyboard = wallets.map((w) => [
+      const walletNames = wallets.map(w => w.name);
+      
+      const extractedNLP = await extractWithGeminiNLP(textInput, isIncome ? 'income' : 'expense', walletNames);
+
+      // Auto-assign wallet logic
+      let targetWallet = wallets[0]; // Default to the first wallet if no match
+      
+      if (extractedNLP.wallet_name) {
+        // Try to find a matching wallet ignoring case
+        const matchedWallet = wallets.find(w => w.name.toLowerCase() === extractedNLP.wallet_name!.toLowerCase());
+        if (matchedWallet) {
+          targetWallet = matchedWallet;
+        }
+      }
+
+      const { error: insertErr } = await supabase.from('transactions').insert([
         {
-          text: `💳 ${w.name}`,
-          callback_data: `NLP|${w.id}`,
+          wallet_id: targetWallet.id,
+          merchant_name: extractedNLP.merchant,
+          amount: extractedNLP.amount,
+          category: extractedNLP.category ?? 'Others',
+          type: extractedNLP.type ?? 'expense',
+          transaction_date: getExactTimestamp(extractedNLP.date, extractedNLP.time),
         },
       ]);
 
+      if (insertErr) {
+        console.error('Transaction insert error:', insertErr);
+        await sendMessage(chatId, `❌ Gagal menyimpan transaksi: ${insertErr.message}`);
+        return ok();
+      }
+
+      const currentBalance = Number(targetWallet.current_balance ?? 0);
+      const newBalance = extractedNLP.type === 'income' 
+        ? currentBalance + extractedNLP.amount 
+        : currentBalance - extractedNLP.amount;
+
+      const { error: walletUpdateErr } = await supabase
+        .from('wallets')
+        .update({ current_balance: newBalance })
+        .eq('id', targetWallet.id);
+
+      if (walletUpdateErr) {
+        console.error('Wallet balance update error:', walletUpdateErr);
+      }
+
       const confirmMsg =
-        `📝 *Data Terekstrak:*\n\n` +
+        `✅ *Tercatat Otomatis!*\n\n` +
         `*Merchant:* ${extractedNLP.merchant}\n` +
         `*Nominal:* ${fmtRp(extractedNLP.amount)}\n` +
         `*Kategori:* ${extractedNLP.category}\n` +
-        `*Tipe:* ${extractedNLP.type === 'income' ? '📈 income' : '📉 expense'}\n\n` +
-        `Pilih dompet:`;
+        `*Tipe:* ${extractedNLP.type === 'income' ? '📈' : '📉'} ${extractedNLP.type}\n` +
+        `*Dompet:* ${targetWallet.name}\n` +
+        `*Saldo Baru:* ${fmtRp(newBalance)}`;
 
-      const sentMsg = await sendMessage(chatId, confirmMsg, {
-        inline_keyboard: inlineKeyboard,
-      });
-      
-      if (sentMsg && sentMsg.ok) {
-        pendingTransactions.set(sentMsg.result.message_id.toString(), extractedNLP);
-      }
+      await sendMessage(chatId, confirmMsg);
       
       return ok();
     }
