@@ -136,6 +136,11 @@ const ALLOWED_INCOME_CATEGORIES = [
 const EXTRACTION_PROMPT = `You are a financial data extractor for an Indonesian personal finance tracker.
 Analyze the input (text or receipt image) and return strictly a raw JSON object — no markdown fences, no explanation, no backticks.
 
+STRICT RULES:
+1. NO GUESSING: If the text is short and does not explicitly name a merchant, strictly set "merchant_name" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
+2. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant_name".
+3. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
+
 Required JSON shape:
 {
   "type": "expense",
@@ -234,7 +239,12 @@ const EXTRACTION_PROMPT_NLP = `Extract the transaction details.
 Allowed Expense Categories (/out): ${ALLOWED_EXPENSE_CATEGORIES.join(", ")}.
 Allowed Income Categories (/in): ${ALLOWED_INCOME_CATEGORIES.join(", ")}.
 
-Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
+STRICT RULES:
+1. NO GUESSING: If the input is short and does not explicitly name a merchant, strictly set "merchant" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
+2. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant".
+3. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
+4. Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
+
 Return ONLY raw JSON: {"amount": number, "merchant": "string", "category": "string"}`;
 
 async function extractWithGeminiNLP(
