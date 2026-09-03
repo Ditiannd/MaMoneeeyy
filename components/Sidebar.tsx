@@ -1,13 +1,33 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Wallet, PieChart as PieChartIcon, Settings, LogOut, Receipt, Zap } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+interface GitHubProfile {
+  name: string;
+  login: string;
+  avatar_url: string;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const [profile, setProfile] = useState<GitHubProfile | null>(null);
+
+  useEffect(() => {
+    fetch('https://api.github.com/users/Ditiannd')
+      .then((res) => res.json())
+      .then((data) => {
+        setProfile({
+          name: data.name || 'Ditiannd',
+          login: data.login || 'Ditiannd',
+          avatar_url: data.avatar_url || 'https://github.com/shadcn.png',
+        });
+      })
+      .catch(console.error);
+  }, []);
 
   const getLinkClasses = (path: string) => {
     const isActive = pathname === path;
@@ -48,12 +68,16 @@ export default function Sidebar() {
       {/* User Profile Snippet */}
       <div className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-md hover:bg-white/10 transition-colors cursor-pointer">
         <Avatar className="h-9 w-9 border border-white/10">
-          <AvatarImage src="https://github.com/shadcn.png" />
-          <AvatarFallback>RR</AvatarFallback>
+          <AvatarImage src={profile?.avatar_url || "https://github.com/shadcn.png"} />
+          <AvatarFallback>{profile?.name?.charAt(0) || "RR"}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-zinc-100 truncate">Raka Ramdhani</p>
-          <p className="text-xs text-zinc-500 truncate">Pro Workspace</p>
+          <p className="text-sm font-semibold text-zinc-100 truncate">
+            {profile?.name || "Loading..."}
+          </p>
+          <p className="text-xs text-zinc-500 truncate">
+            {profile ? `@${profile.login}` : "Fetching profile..."}
+          </p>
         </div>
         <LogOut className="h-4 w-4 text-zinc-500 hover:text-zinc-300" />
       </div>
