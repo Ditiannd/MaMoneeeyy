@@ -7,6 +7,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { ArrowDownRight, ArrowUpRight, Coffee, Car, Zap, Clapperboard, ShoppingBag, Heart, MoreHorizontal, LineChart, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { IconRenderer } from "@/components/IconRenderer";
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const COLORS = ['#34d399', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -98,6 +103,22 @@ export default function Dashboard() {
         console.error(err);
         setIsLoading(false);
       });
+
+    // Supabase Realtime Subscription for new transactions
+    const channel = supabase
+      .channel('public:transactions')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'transactions' },
+        (payload) => {
+          setTransactions((prev) => [payload.new, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleSelectWallet = useCallback((id: string) => {
