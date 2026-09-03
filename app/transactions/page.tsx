@@ -253,6 +253,23 @@ export default function TransactionsPage() {
         console.error(err);
         setIsLoading(false);
       });
+
+    const channel = supabase
+      .channel('custom-insert-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'transactions' },
+        (payload) => {
+          setTransactions((prev) => [payload.new, ...prev]);
+        }
+      )
+      .subscribe((status) => {
+        console.log("Realtime status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const categories = Array.from(new Set(transactions.map(tx => tx.category)));
