@@ -114,6 +114,17 @@ export default function Dashboard() {
           setTransactions((prev) => [payload.new, ...prev]);
         }
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'wallets' },
+        (payload) => {
+          setWallets((currentWallets) =>
+            currentWallets.map((wallet) =>
+              wallet.id === payload.new.id ? { ...wallet, ...payload.new } : wallet
+            )
+          );
+        }
+      )
       .subscribe();
 
     return () => {
