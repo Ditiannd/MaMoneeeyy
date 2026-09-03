@@ -1,12 +1,9 @@
 "use client";
 
-import Link from 'next/link';
-
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Coffee, Car, Zap, Clapperboard, ShoppingBag, Heart, MoreHorizontal, LineChart, Loader2 } from "lucide-react";
+import { Wallet, ArrowDownRight, ArrowUpRight, Coffee, Car, Zap, Clapperboard, ShoppingBag, Heart, MoreHorizontal, CreditCard, Landmark, Coins, LogIn, LineChart, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { IconRenderer } from "@/components/IconRenderer";
 
 const COLORS = ['#34d399', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -36,47 +33,15 @@ const getCategoryColor = (category: string) => {
   }
 };
 
-
+const getWalletStyle = (name: string) => {
+  if (name.toLowerCase().includes('bca')) return { icon: Landmark, color: 'from-blue-600 to-indigo-800' };
+  if (name.toLowerCase().includes('cash')) return { icon: Coins, color: 'from-emerald-500 to-teal-700' };
+  if (name.toLowerCase().includes('ovo')) return { icon: CreditCard, color: 'from-purple-500 to-fuchsia-700' };
+  if (name.toLowerCase().includes('gopay')) return { icon: CreditCard, color: 'from-sky-500 to-blue-700' };
+  return { icon: Wallet, color: 'from-zinc-600 to-zinc-800' };
+};
 
 const darkCard = "bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl";
-
-const DashboardWalletCard = memo(({
-  wallet,
-  isSelected,
-  onSelect
-}: {
-  wallet: any,
-  isSelected: boolean,
-  onSelect: (id: string) => void
-}) => {
-  return (
-    <div 
-      onClick={() => onSelect(wallet.id)}
-      className={`relative p-5 rounded-2xl overflow-hidden flex flex-col justify-between min-h-[120px] mb-4 text-white shadow-lg transition-all duration-300 cursor-pointer ${isSelected ? 'ring-2 ring-white/50 scale-105 shadow-white/10' : 'hover:scale-105'}`}
-      style={{
-        background: wallet.gradient_from && wallet.gradient_to 
-          ? `linear-gradient(to bottom right, ${wallet.gradient_from}, ${wallet.gradient_to})`
-          : '#27272a'
-      }}
-    >
-      <div className="absolute -right-6 -bottom-6 opacity-20 text-white pointer-events-none">
-        <Zap className="w-28 h-28" />
-      </div>
-      <div className="relative z-10 flex justify-between items-start mb-6">
-        <div>
-          <p className="text-white/80 text-xs font-medium mb-1">{wallet.type === 'bank' ? 'Bank Account' : wallet.type === 'ewallet' ? 'E-Wallet' : 'Cash'}</p>
-          <p className="font-bold text-sm tracking-wide">{wallet.name}</p>
-        </div>
-        <IconRenderer name={wallet.icon} className="h-5 w-5 text-white/90" />
-      </div>
-      <div className="relative z-10">
-        <p className="text-white/80 text-xs font-medium mb-1">Balance</p>
-        <p className="text-xl font-extrabold tracking-tight">Rp {(wallet.current_balance || 0).toLocaleString('id-ID')}</p>
-      </div>
-    </div>
-  );
-});
-DashboardWalletCard.displayName = 'DashboardWalletCard';
 
 export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
@@ -98,10 +63,6 @@ export default function Dashboard() {
         console.error(err);
         setIsLoading(false);
       });
-  }, []);
-
-  const handleSelectWallet = useCallback((id: string) => {
-    setSelectedWalletId(prev => prev === id ? null : id);
   }, []);
 
   if (!mounted) return null;
@@ -279,19 +240,37 @@ export default function Dashboard() {
         
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-sm font-bold text-zinc-100">My Wallets</h3>
-          <Link href="/settings"><button className="text-emerald-400 text-xs font-semibold hover:text-emerald-300">See More</button></Link>
+          <button className="text-emerald-400 text-xs font-semibold hover:text-emerald-300">Add New</button>
         </div>
         
         {/* Virtual Cards Stack */}
         <div className="space-y-4 mb-12">
-          {wallets.slice(0, 4).map((wallet) => (
-            <DashboardWalletCard 
-              key={wallet.id}
-              wallet={wallet}
-              isSelected={selectedWalletId === wallet.id}
-              onSelect={handleSelectWallet}
-            />
-          ))}
+          {wallets.map((wallet) => {
+            const style = getWalletStyle(wallet.name);
+            const Icon = style.icon;
+            const isSelected = selectedWalletId === wallet.id;
+            return (
+            <div 
+              key={wallet.id} 
+              onClick={() => setSelectedWalletId(isSelected ? null : wallet.id)}
+              className={`p-5 rounded-3xl bg-gradient-to-br text-white shadow-lg relative overflow-hidden transition-all duration-300 cursor-pointer ${style.color} ${isSelected ? 'ring-2 ring-white/50 scale-105 shadow-white/10' : 'hover:scale-105'}`}
+            >
+              <div className="absolute -right-6 -bottom-6 opacity-20 text-white pointer-events-none">
+                <Zap className="w-28 h-28" />
+              </div>
+              <div className="relative z-10 flex justify-between items-start mb-6">
+                <div>
+                  <p className="text-white/80 text-xs font-medium mb-1">{wallet.type === 'bank' ? 'Bank Account' : wallet.type === 'ewallet' ? 'E-Wallet' : 'Cash'}</p>
+                  <p className="font-bold text-sm tracking-wide">{wallet.name}</p>
+                </div>
+                <Icon className="h-5 w-5 text-white/90" />
+              </div>
+              <div className="relative z-10">
+                <p className="text-white/80 text-xs font-medium mb-1">Balance</p>
+                <p className="text-xl font-extrabold tracking-tight">Rp {(wallet.current_balance || 0).toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+          )})}
           {wallets.length === 0 && !isLoading && (
             <div className="text-center text-zinc-500 text-xs">No wallets found. Add a wallet in database.</div>
           )}
