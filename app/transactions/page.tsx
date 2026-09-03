@@ -48,7 +48,7 @@ const formatFullDateTime = (timestamp: string) => {
     minute: '2-digit',
     second: '2-digit',
     hour12: false
-  }).format(date);
+  }).format(date).replace(/\./g, ':');
 };
 
 const TransactionRow = memo(({ 

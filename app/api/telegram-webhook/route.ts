@@ -46,12 +46,21 @@ function cleanupPending() {
 }
 
 function getExactTimestamp(date?: string, time?: string): string {
-  if (date && time) {
-    // Combine date and time, assuming UTC+7 (WIB)
-    return `${date}T${time}:00+07:00`;
+  let finalTimestamp = new Date().toISOString(); // Default to exact current time (Now)
+  
+  if (date) {
+    if (time) {
+      // Combine AI extracted date and time (assuming WIB / UTC+7)
+      finalTimestamp = new Date(`${date}T${time}:00+07:00`).toISOString();
+    } else {
+      // If we only have the date from the receipt, append the exact current HH:mm:ss
+      const now = new Date();
+      const currentTimeString = now.toISOString().split('T')[1]; 
+      finalTimestamp = new Date(`${date}T${currentTimeString}`).toISOString();
+    }
   }
-  // Fallback to exact current time
-  return new Date().toISOString();
+  
+  return finalTimestamp;
 }
 
 // =============================================================================

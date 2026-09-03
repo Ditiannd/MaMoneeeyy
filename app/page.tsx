@@ -239,7 +239,14 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-col justify-center">
                           <p className="font-semibold text-[13px] text-zinc-100 leading-none mb-1.5">{tx.merchant_name}</p>
-                          <p className="text-[11px] text-zinc-500 leading-none">{tx.transaction_date}</p>
+                          <p className="text-[11px] text-zinc-500 leading-none">
+                            {tx.transaction_date 
+                              ? new Intl.DateTimeFormat('id-ID', {
+                                  day: '2-digit', month: 'short', year: 'numeric',
+                                  hour: '2-digit', minute: '2-digit'
+                                }).format(new Date(tx.transaction_date)).replace(/\./g, ':')
+                              : '-'}
+                          </p>
                         </div>
                       </div>
                     </TableCell>
