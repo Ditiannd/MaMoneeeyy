@@ -341,7 +341,7 @@ export async function POST(req: Request) {
 
     if (body.message && body.message.text) {
       const textCmd = body.message.text.trim().toLowerCase();
-      if (textCmd === '/undo' || textCmd === '/cglin' || textCmd === '/cglout') {
+      if (textCmd === '/undo' || textCmd === '/switch') {
         const chatId = body.message.chat.id;
         const { data: lastTx } = await supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(1).single();
         
@@ -360,20 +360,10 @@ export async function POST(req: Request) {
           }
           
           await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" (Rp ${lastTx.amount}) berhasil dibatalkan.`);
-        } else if (textCmd === '/cglin') {
-          await supabase.from('transactions').update({ type: 'income' }).eq('id', lastTx.id);
-          const { data: wallet } = await supabase.from('wallets').select('current_balance').eq('id', lastTx.wallet_id).single();
-          if (wallet && lastTx.type !== 'income') {
-             await supabase.from('wallets').update({ current_balance: Number(wallet.current_balance) + (lastTx.amount * 2) }).eq('id', lastTx.wallet_id);
-          }
-          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" diubah menjadi Income 📈.`);
-        } else if (textCmd === '/cglout') {
-          await supabase.from('transactions').update({ type: 'expense' }).eq('id', lastTx.id);
-          const { data: wallet } = await supabase.from('wallets').select('current_balance').eq('id', lastTx.wallet_id).single();
-          if (wallet && lastTx.type !== 'expense') {
-             await supabase.from('wallets').update({ current_balance: Number(wallet.current_balance) - (lastTx.amount * 2) }).eq('id', lastTx.wallet_id);
-          }
-          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" diubah menjadi Expense 📉.`);
+        } else if (textCmd === '/switch') {
+          const newType = lastTx.type === 'income' ? 'expense' : 'income';
+          await supabase.from('transactions').update({ type: newType }).eq('id', lastTx.id);
+          await sendMessage(chatId, `✅ Status transaksi "${lastTx.merchant_name}" berhasil dibalik menjadi ${newType.toUpperCase()}.`);
         }
         return ok();
       }
