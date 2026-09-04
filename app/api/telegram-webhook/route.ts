@@ -29,6 +29,7 @@ interface PendingTransaction {
   wallet_name?: string;
   created_at: number; // epoch ms – for TTL cleanup
   items?: { name: string; price: number; qty: number }[];
+  transfer_details?: { bank: string; account_number: string; recipient_name: string; };
 }
 
 const pendingTransactions = new Map<string, PendingTransaction>();
@@ -154,6 +155,7 @@ STRICT RULES:
 1. NO GUESSING: If the text is short and does not explicitly name a merchant, strictly set "merchant_name" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
 2. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant_name".
 3. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
+4. BANK TRANSFERS: If the image is a bank transfer receipt (e.g., mobile banking screenshot), extract the recipient name ("Tujuan" / "Penerima"), destination bank, and account number. Map the recipient name directly to "merchant_name" in Title Case.
 
 Required JSON shape:
 {
@@ -163,6 +165,11 @@ Required JSON shape:
   "date": "YYYY-MM-DD",
   "time": "HH:mm",
   "category": "string",
+  "transfer_details": {
+    "bank": "string",
+    "account_number": "string",
+    "recipient_name": "string"
+  },
   "items": [
     { "name": "string", "price": number, "qty": number }
   ]
@@ -245,7 +252,8 @@ async function extractWithGemini(
     category: category,
     type: 'expense',
     created_at: Date.now(),
-    items: parsed.items ?? []
+    items: parsed.items ?? [],
+    transfer_details: parsed.transfer_details
   };
 }
 
@@ -357,8 +365,12 @@ export async function POST(req: Request) {
         }
 
         // 1. Insert the transaction row
-        const merchant = pending?.merchant ?? 'Scanned Receipt';
+        const merchant = pending?.transfer_details?.recipient_name ?? pending?.merchant ?? 'Scanned Receipt';
         const finalIsoString = getExactTimestamp(pending?.date, pending?.time);
+        
+        const notes = pending?.transfer_details 
+          ? JSON.stringify(pending.transfer_details) 
+          : null;
 
         const { data: insertedTx, error: insertErr } = await supabase.from('transactions').insert([
           {
@@ -368,6 +380,7 @@ export async function POST(req: Request) {
             category: pending?.category ?? 'Others',
             type: 'expense',
             transaction_date: finalIsoString,
+            notes: notes,
           },
         ]).select().single();
 
