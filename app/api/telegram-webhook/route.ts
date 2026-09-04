@@ -241,11 +241,12 @@ Allowed Expense Categories (/out): ${ALLOWED_EXPENSE_CATEGORIES.join(", ")}.
 Allowed Income Categories (/in): ${ALLOWED_INCOME_CATEGORIES.join(", ")}.
 
 STRICT RULES:
-1. NO GUESSING: If the input is short and does not explicitly name a merchant, strictly set "merchant" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
-2. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant".
-3. WALLET EXTRACTION: Check if the text contains a word matching one of the Available Wallets provided in the Input. If it does, extract it into the "wallet" field. If not, set "wallet" to null.
-4. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
-5. Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
+1. DYNAMIC MERCHANT EXTRACTION: Any words in the input that are NOT the amount (e.g., 25k, 12k) or a known wallet name MUST be extracted and used as the "merchant". For example, "nasi goreng 12k" -> merchant: "Nasi goreng", "uang jajan 50k bca" -> merchant: "Uang jajan".
+2. CAPITALIZATION: Strictly capitalize the first letter of the extracted "merchant" (e.g., "Nasi goreng").
+3. ABSOLUTE FALLBACKS: ONLY if the user provides absolutely zero descriptive words (e.g., just "23k" or "50k cash"), set the "merchant" to "Deposit" (for income) or "General" (for expense). Do not use "Unknown".
+4. WALLET IS NOT MERCHANT: Words matching Available Wallets provided in the Input must map to the "wallet" field and NEVER be included in the "merchant". If no wallet word is found, set "wallet" to null.
+5. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
+6. Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
 
 Return ONLY raw JSON: {"amount": number, "merchant": "string", "category": "string", "wallet": "string" | null}`;
 
