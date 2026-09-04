@@ -368,10 +368,6 @@ export async function POST(req: Request) {
         const merchant = pending?.transfer_details?.recipient_name ?? pending?.merchant ?? 'Scanned Receipt';
         const finalIsoString = getExactTimestamp(pending?.date, pending?.time);
         
-        const notes = pending?.transfer_details 
-          ? JSON.stringify(pending.transfer_details) 
-          : null;
-
         const { data: insertedTx, error: insertErr } = await supabase.from('transactions').insert([
           {
             wallet_id: walletId,
@@ -380,7 +376,7 @@ export async function POST(req: Request) {
             category: pending?.category ?? 'Others',
             type: 'expense',
             transaction_date: finalIsoString,
-            notes: notes,
+            transfer_details: pending?.transfer_details || null,
           },
         ]).select().single();
 
@@ -430,6 +426,13 @@ export async function POST(req: Request) {
           `*Tipe:* 📉 expense\n` +
           `*Dompet:* ${walletRow.name}\n` +
           `*Saldo Baru:* ${fmtRp(newBalance)}`;
+
+        if (pending?.transfer_details) {
+          replyText += `\n\n🏦 *Detail Transfer:*\n` +
+            `*Bank:* ${pending.transfer_details.bank}\n` +
+            `*Rekening:* ${pending.transfer_details.account_number}\n` +
+            `*Penerima:* ${pending.transfer_details.recipient_name}`;
+        }
 
         if (pending?.items && pending.items.length > 0) {
           replyText += `\n\n*Detail Barang:*\n`;
@@ -898,13 +901,21 @@ export async function POST(req: Request) {
       },
     ]);
 
-    const confirmMsg =
+    let confirmMsg =
       `📝 *Data Terekstrak:*\n\n` +
       `*Merchant:* ${extracted.merchant}\n` +
       `*Nominal:* ${fmtRp(extracted.amount)}\n` +
       `*Kategori:* ${extracted.category}\n` +
-      `*Tanggal:* ${extracted.date}\n\n` +
-      `Pilih dompet sumber dana:`;
+      `*Tanggal:* ${extracted.date}`;
+
+    if (extracted.transfer_details) {
+      confirmMsg += `\n\n🏦 *Detail Transfer:*\n` +
+        `*Bank:* ${extracted.transfer_details.bank}\n` +
+        `*Rekening:* ${extracted.transfer_details.account_number}\n` +
+        `*Penerima:* ${extracted.transfer_details.recipient_name}`;
+    }
+
+    confirmMsg += `\n\nPilih dompet sumber dana:`;
 
     await editMessageText(chatId, loadingMsgId!, confirmMsg, {
       inline_keyboard: inlineKeyboard,

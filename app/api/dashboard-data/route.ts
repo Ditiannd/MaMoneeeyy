@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         .order('position', { ascending: true }),
       supabase
         .from('transactions')
-        .select('id, wallet_id, type, amount, merchant_name, category, transaction_date, receipt_url, wallets(name)')
+        .select('id, wallet_id, type, amount, merchant_name, category, transaction_date, receipt_url, transfer_details, wallets(name)')
         .order('transaction_date', { ascending: false })
         .limit(limit)
     ]);
