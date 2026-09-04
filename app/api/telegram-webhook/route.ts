@@ -339,6 +339,46 @@ export async function POST(req: Request) {
     if (!body.message && !body.callback_query) return ok();
     if (body.message && !body.message.text && (!body.message.photo || body.message.photo.length === 0)) return ok();
 
+    if (body.message && body.message.text) {
+      const textCmd = body.message.text.trim().toLowerCase();
+      if (textCmd === '/undo' || textCmd === '/cglin' || textCmd === '/cglout') {
+        const chatId = body.message.chat.id;
+        const { data: lastTx } = await supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(1).single();
+        
+        if (!lastTx) {
+          await sendMessage(chatId, "⚠️ Tidak ada transaksi yang bisa diubah.");
+          return ok();
+        }
+
+        if (textCmd === '/undo') {
+          await supabase.from('transactions').delete().eq('id', lastTx.id);
+          
+          const { data: wallet } = await supabase.from('wallets').select('current_balance').eq('id', lastTx.wallet_id).single();
+          if (wallet) {
+            const revertAmount = lastTx.type === 'expense' ? lastTx.amount : -lastTx.amount;
+            await supabase.from('wallets').update({ current_balance: Number(wallet.current_balance) + revertAmount }).eq('id', lastTx.wallet_id);
+          }
+          
+          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" (Rp ${lastTx.amount}) berhasil dibatalkan.`);
+        } else if (textCmd === '/cglin') {
+          await supabase.from('transactions').update({ type: 'income' }).eq('id', lastTx.id);
+          const { data: wallet } = await supabase.from('wallets').select('current_balance').eq('id', lastTx.wallet_id).single();
+          if (wallet && lastTx.type !== 'income') {
+             await supabase.from('wallets').update({ current_balance: Number(wallet.current_balance) + (lastTx.amount * 2) }).eq('id', lastTx.wallet_id);
+          }
+          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" diubah menjadi Income 📈.`);
+        } else if (textCmd === '/cglout') {
+          await supabase.from('transactions').update({ type: 'expense' }).eq('id', lastTx.id);
+          const { data: wallet } = await supabase.from('wallets').select('current_balance').eq('id', lastTx.wallet_id).single();
+          if (wallet && lastTx.type !== 'expense') {
+             await supabase.from('wallets').update({ current_balance: Number(wallet.current_balance) - (lastTx.amount * 2) }).eq('id', lastTx.wallet_id);
+          }
+          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" diubah menjadi Expense 📉.`);
+        }
+        return ok();
+      }
+    }
+
     // =========================================================================
     // BRANCH B — Callback Query (inline keyboard click)
     // =========================================================================
@@ -351,25 +391,72 @@ export async function POST(req: Request) {
       // Acknowledge the callback immediately to remove Telegram's spinner
       await answerCallbackQuery(cbq.id);
 
-      // Expected format: SCAN|<walletId>|<amount>
-      if (data.startsWith('SCAN|')) {
-        const segments = data.split('|');
-        if (segments.length < 3) {
-          await editMessageText(chatId, messageId, '⚠️ Format callback tidak valid.');
+      if (data === 'action_cancel') {
+        pendingTransactions.delete(messageId.toString());
+        await editMessageText(chatId, messageId, '🚫 Transaksi dibatalkan.');
+        return ok();
+      }
+
+      if (data === 'action_more_wallets' || data === 'action_back_wallets') {
+        const { data: allWallets } = await supabase.from('wallets').select('id, name').order('created_at', { ascending: true });
+        
+        let newKeyboard: any[][] = [];
+        if (data === 'action_more_wallets') {
+          const top4 = ['cash', 'bri', 'seabank', 'shopeepay'];
+          const otherWallets = (allWallets || []).filter(w => !top4.includes(w.name.toLowerCase()));
+          
+          for (let i = 0; i < otherWallets.length; i += 2) {
+            const row = [{ text: `💳 ${otherWallets[i].name}`, callback_data: `wallet_${otherWallets[i].id}` }];
+            if (otherWallets[i+1]) {
+              row.push({ text: `💳 ${otherWallets[i+1].name}`, callback_data: `wallet_${otherWallets[i+1].id}` });
+            }
+            newKeyboard.push(row);
+          }
+          newKeyboard.push([{ text: "⬅️ Back", callback_data: "action_back_wallets" }]);
+        } else {
+          newKeyboard = [
+            [{ text: "Cash", callback_data: "wallet_Cash" }, { text: "BRI", callback_data: "wallet_BRI" }],
+            [{ text: "SEABANK", callback_data: "wallet_SEABANK" }, { text: "ShopeePay", callback_data: "wallet_ShopeePay" }],
+            [{ text: "🔄 More...", callback_data: "action_more_wallets" }, { text: "❌ Cancel", callback_data: "action_cancel" }]
+          ];
+        }
+        
+        await fetch(`${TELEGRAM_API}/editMessageReplyMarkup`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: newKeyboard } })
+        });
+        return ok();
+      }
+
+      if (data.startsWith('wallet_') || data.startsWith('SCAN|') || data.startsWith('NLP|')) {
+        let walletIdentifier = '';
+        if (data.startsWith('wallet_')) {
+          walletIdentifier = data.replace('wallet_', '');
+        } else if (data.startsWith('SCAN|')) {
+          walletIdentifier = data.split('|')[1];
+        } else if (data.startsWith('NLP|')) {
+          walletIdentifier = data.split('|')[1];
+        }
+        
+        const pending = pendingTransactions.get(messageId.toString());
+        if (!pending) {
+          await editMessageText(chatId, messageId, '⚠️ Transaksi kadaluarsa atau sudah diproses.');
           return ok();
         }
+        
+        const amount = pending.amount;
 
-        const [, walletId, amountStr] = segments;
-        const amount = Number(amountStr);
-
-        const pending = pendingTransactions.get(messageId.toString());
-
-        // Fetch the wallet name for the confirmation message
-        const { data: walletRow, error: walletErr } = await supabase
-          .from('wallets')
-          .select('id, name, current_balance')
-          .eq('id', walletId)
-          .single();
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(walletIdentifier);
+        let query = supabase.from('wallets').select('id, name, current_balance');
+        if (isUUID) {
+          query = query.eq('id', walletIdentifier);
+        } else {
+          query = query.ilike('name', walletIdentifier);
+        }
+        
+        const { data: walletRow, error: walletErr } = await query.single();
+        const walletId = walletRow?.id;
 
         if (walletErr || !walletRow) {
           await editMessageText(chatId, messageId, '⚠️ Dompet tidak ditemukan.');
@@ -585,12 +672,11 @@ export async function POST(req: Request) {
 
       if (!targetWallet) {
         // Halt and Ask via Inline Keyboard
-        const inlineKeyboard = wallets.map((w) => [
-          {
-            text: `💳 ${w.name}`,
-            callback_data: `NLP|${w.id}`,
-          },
-        ]);
+        const inlineKeyboard = [
+          [{ text: "Cash", callback_data: "wallet_Cash" }, { text: "BRI", callback_data: "wallet_BRI" }],
+          [{ text: "SEABANK", callback_data: "wallet_SEABANK" }, { text: "ShopeePay", callback_data: "wallet_ShopeePay" }],
+          [{ text: "🔄 More...", callback_data: "action_more_wallets" }, { text: "❌ Cancel", callback_data: "action_cancel" }]
+        ];
         
         const confirmMsg =
           `📝 *Data Terekstrak:*\n\n` +
@@ -908,13 +994,11 @@ export async function POST(req: Request) {
       return ok();
     }
 
-    // Build inline keyboard — format: SCAN|<walletId>|<amount>
-    const inlineKeyboard = wallets.map((w) => [
-      {
-        text: `💳 ${w.name}`,
-        callback_data: `SCAN|${w.id}|${extracted!.amount}`,
-      },
-    ]);
+    const inlineKeyboard = [
+      [{ text: "Cash", callback_data: "wallet_Cash" }, { text: "BRI", callback_data: "wallet_BRI" }],
+      [{ text: "SEABANK", callback_data: "wallet_SEABANK" }, { text: "ShopeePay", callback_data: "wallet_ShopeePay" }],
+      [{ text: "🔄 More...", callback_data: "action_more_wallets" }, { text: "❌ Cancel", callback_data: "action_cancel" }]
+    ];
 
     let confirmMsg =
       `📝 *Data Terekstrak:*\n\n` +
