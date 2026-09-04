@@ -152,10 +152,14 @@ const EXTRACTION_PROMPT = `You are a financial data extractor for an Indonesian 
 Analyze the input (text or receipt image) and return strictly a raw JSON object — no markdown fences, no explanation, no backticks.
 
 STRICT RULES:
-1. NO GUESSING: If the text is short and does not explicitly name a merchant, strictly set "merchant_name" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
-2. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant_name".
-3. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
-4. BANK TRANSFERS: If the image is a bank transfer receipt (e.g., mobile banking screenshot), extract the recipient name ("Tujuan" / "Penerima"), destination bank, and account number. Map the recipient name directly to "merchant_name" in Title Case.
+1. TRANSACTION TYPE: Carefully analyze the image to determine if the transaction is an outflow (expense) or an inflow (income). 
+   - Set 'type' to 'income' IF you see visual cues such as a plus sign (+) before the amount (e.g., '+Rp800.000'), or keywords like 'Isi Saldo', 'Top Up', 'Transfer Masuk', or 'Terima Dana'.
+   - Set 'type' to 'expense' ONLY for standard payments, purchases, or outbound transfers ('Transfer', 'Pembayaran', 'Tarik Tunai').
+2. NO GUESSING: If the text is short and does not explicitly name a merchant, strictly set "merchant_name" to "Deposit" (for income) or "General" (for expense). Do not return "Unknown".
+3. TOP-UP MERCHANT FALLBACK: If the transaction is identified as 'Isi Saldo' or 'Top Up' (income), and no specific sender person's name is available, set the 'merchant_name' to 'Deposit'.
+4. WALLET IS NOT MERCHANT: Words like "cash", "bca", "seabank", "gopay", "ovo", "dana", "bank" are wallet names. NEVER use them as the "merchant_name".
+5. CONSISTENCY: Always return the exact same JSON structure for identical inputs.
+6. BANK TRANSFERS: If the image is a bank transfer receipt, you MUST extract the destination bank ('Tujuan' bank), destination account number, and recipient name into the 'transfer_details' object. Set the 'merchant_name' to the recipient's name.
 
 Required JSON shape:
 {
@@ -253,7 +257,9 @@ async function extractWithGemini(
     type: 'expense',
     created_at: Date.now(),
     items: parsed.items ?? [],
-    transfer_details: parsed.transfer_details
+    transfer_details: (parsed.transfer_details && (parsed.transfer_details.bank || parsed.transfer_details.account_number || parsed.transfer_details.recipient_name)) 
+      ? parsed.transfer_details 
+      : null
   };
 }
 
@@ -428,10 +434,11 @@ export async function POST(req: Request) {
           `*Saldo Baru:* ${fmtRp(newBalance)}`;
 
         if (pending?.transfer_details) {
+          const td = pending.transfer_details;
           replyText += `\n\n🏦 *Detail Transfer:*\n` +
-            `*Bank:* ${pending.transfer_details.bank}\n` +
-            `*Rekening:* ${pending.transfer_details.account_number}\n` +
-            `*Penerima:* ${pending.transfer_details.recipient_name}`;
+            `*Bank:* ${td.bank || '-'}\n` +
+            `*Rekening:* ${td.account_number || '-'}\n` +
+            `*Penerima:* ${td.recipient_name || '-'}`;
         }
 
         if (pending?.items && pending.items.length > 0) {
@@ -909,10 +916,11 @@ export async function POST(req: Request) {
       `*Tanggal:* ${extracted.date}`;
 
     if (extracted.transfer_details) {
+      const td = extracted.transfer_details;
       confirmMsg += `\n\n🏦 *Detail Transfer:*\n` +
-        `*Bank:* ${extracted.transfer_details.bank}\n` +
-        `*Rekening:* ${extracted.transfer_details.account_number}\n` +
-        `*Penerima:* ${extracted.transfer_details.recipient_name}`;
+        `*Bank:* ${td.bank || '-'}\n` +
+        `*Rekening:* ${td.account_number || '-'}\n` +
+        `*Penerima:* ${td.recipient_name || '-'}`;
     }
 
     confirmMsg += `\n\nPilih dompet sumber dana:`;
