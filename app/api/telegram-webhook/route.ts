@@ -527,7 +527,7 @@ export async function POST(req: Request) {
       const extractedNLP = await extractWithGeminiNLP(textInput, isIncome ? 'income' : 'expense', walletNames);
 
       // Auto-assign wallet logic
-      let targetWallet = wallets[0]; // Default to the first wallet if no match
+      let targetWallet: any = null;
       
       if (extractedNLP.wallet_name) {
         // Try to find a matching wallet ignoring case
@@ -535,6 +535,34 @@ export async function POST(req: Request) {
         if (matchedWallet) {
           targetWallet = matchedWallet;
         }
+      }
+
+      if (!targetWallet) {
+        // Halt and Ask via Inline Keyboard
+        const inlineKeyboard = wallets.map((w) => [
+          {
+            text: `💳 ${w.name}`,
+            callback_data: `NLP|${w.id}`,
+          },
+        ]);
+        
+        const confirmMsg =
+          `📝 *Data Terekstrak:*\n\n` +
+          `*Merchant:* ${extractedNLP.merchant}\n` +
+          `*Nominal:* ${fmtRp(extractedNLP.amount)}\n` +
+          `*Kategori:* ${extractedNLP.category}\n` +
+          `*Tipe:* ${extractedNLP.type === 'income' ? '📈' : '📉'} ${extractedNLP.type}\n\n` +
+          `Pilih dompet sumber dana:`;
+
+        const sentMsg = await sendMessage(chatId, confirmMsg, {
+          inline_keyboard: inlineKeyboard,
+        });
+        
+        if (sentMsg && sentMsg.ok) {
+          pendingTransactions.set(sentMsg.result.message_id.toString(), extractedNLP);
+        }
+        
+        return ok();
       }
 
       const { error: insertErr } = await supabase.from('transactions').insert([
