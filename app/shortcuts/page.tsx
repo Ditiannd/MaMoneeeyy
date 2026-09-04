@@ -343,6 +343,22 @@ export default function ShortcutsPage() {
               <p className="text-sm text-zinc-400 mt-3">Catat gaji bulanan secara otomatis.</p>
             </div>
           </div>
+
+          {/* /undo */}
+          <div className={`${darkCard} p-5 flex flex-col justify-between`}>
+            <div>
+              <code className="text-zinc-300 font-mono font-bold text-lg bg-zinc-500/20 px-2 py-1 rounded-md">/undo</code>
+              <p className="text-sm text-zinc-400 mt-3">Batal dan hapus transaksi terakhir secara permanen.</p>
+            </div>
+          </div>
+
+          {/* /switch */}
+          <div className={`${darkCard} p-5 flex flex-col justify-between`}>
+            <div>
+              <code className="text-cyan-400 font-mono font-bold text-lg bg-cyan-500/10 px-2 py-1 rounded-md">/switch</code>
+              <p className="text-sm text-zinc-400 mt-3">Ubah status (income/expense) dari transaksi terakhir secara instan.</p>
+            </div>
+          </div>
         </div>
       </section>
 

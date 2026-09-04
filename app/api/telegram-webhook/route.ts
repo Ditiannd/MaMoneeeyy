@@ -352,14 +352,7 @@ export async function POST(req: Request) {
 
         if (textCmd === '/undo') {
           await supabase.from('transactions').delete().eq('id', lastTx.id);
-          
-          const { data: wallet } = await supabase.from('wallets').select('current_balance').eq('id', lastTx.wallet_id).single();
-          if (wallet) {
-            const revertAmount = lastTx.type === 'expense' ? lastTx.amount : -lastTx.amount;
-            await supabase.from('wallets').update({ current_balance: Number(wallet.current_balance) + revertAmount }).eq('id', lastTx.wallet_id);
-          }
-          
-          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" (Rp ${lastTx.amount}) berhasil dibatalkan.`);
+          await sendMessage(chatId, `✅ Transaksi "${lastTx.merchant_name}" berhasil dibatalkan.`);
         } else if (textCmd === '/switch') {
           const newType = lastTx.type === 'income' ? 'expense' : 'income';
           await supabase.from('transactions').update({ type: newType }).eq('id', lastTx.id);
