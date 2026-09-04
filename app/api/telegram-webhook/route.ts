@@ -163,7 +163,7 @@ STRICT RULES:
 
 Required JSON shape:
 {
-  "type": "expense",
+  "type": "income" | "expense",
   "merchant_name": "string",
   "total_amount": number,
   "date": "YYYY-MM-DD",
@@ -186,7 +186,9 @@ Look for the exact time printed on the receipt. If found, return it in HH:mm for
 Allowed Expense Categories: ${ALLOWED_EXPENSE_CATEGORIES.join(", ")}.
 Classify the transaction into strictly ONE of the allowed category strings above. Do not create new categories. Default to 'Others' if uncertain.
 
-If you cannot determine the date, use today: ${new Date().toISOString().split('T')[0]}.`;
+If you cannot determine the date, use today: ${new Date().toISOString().split('T')[0]}.
+
+CRITICAL RULE FOR TRANSACTION TYPE: You must look for a plus sign (+) next to the amount or keywords like 'Isi Saldo', 'Top Up', or 'Terima Dana'. If ANY of these are present, you ABSOLUTELY MUST set the 'type' to 'income'. Defaulting to 'expense' for top-ups is a critical failure.\`;
 
 async function executeWithFallback(
   modelChain: string[],
@@ -244,7 +246,11 @@ async function extractWithGemini(
   const parsed = JSON.parse(raw);
 
   let category = parsed.category ?? 'Others';
-  if (!ALLOWED_EXPENSE_CATEGORIES.includes(category)) {
+  const type = parsed.type === 'income' ? 'income' : 'expense';
+
+  if (type === 'expense' && !ALLOWED_EXPENSE_CATEGORIES.includes(category)) {
+    category = 'Others';
+  } else if (type === 'income' && !ALLOWED_INCOME_CATEGORIES.includes(category)) {
     category = 'Others';
   }
 
@@ -254,7 +260,7 @@ async function extractWithGemini(
     date: parsed.date ?? new Date().toISOString().split('T')[0],
     time: parsed.time,
     category: category,
-    type: 'expense',
+    type: type,
     created_at: Date.now(),
     items: parsed.items ?? [],
     transfer_details: (parsed.transfer_details && (parsed.transfer_details.bank || parsed.transfer_details.account_number || parsed.transfer_details.recipient_name)) 
@@ -380,7 +386,7 @@ export async function POST(req: Request) {
             merchant_name: merchant,
             amount: amount,
             category: pending?.category ?? 'Others',
-            type: 'expense',
+            type: pending?.type ?? 'expense',
             transaction_date: finalIsoString,
             transfer_details: pending?.transfer_details || null,
           },
@@ -412,7 +418,9 @@ export async function POST(req: Request) {
 
         // 2. Update the wallet balance explicitly (deduct expense)
         const currentBalance = Number(walletRow.current_balance ?? 0);
-        const newBalance = currentBalance - amount;
+        const newBalance = pending?.type === 'income'
+          ? currentBalance + amount
+          : currentBalance - amount;
 
         const { error: walletUpdateErr } = await supabase
           .from('wallets')
@@ -429,7 +437,7 @@ export async function POST(req: Request) {
         let replyText = `✅ *Tercatat!*\n\n` +
           `*Merchant:* ${merchant}\n` +
           `*Nominal:* ${fmtRp(amount)}\n` +
-          `*Tipe:* 📉 expense\n` +
+          `*Tipe:* ${pending?.type === 'income' ? '📈 income' : '📉 expense'}\n` +
           `*Dompet:* ${walletRow.name}\n` +
           `*Saldo Baru:* ${fmtRp(newBalance)}`;
 
