@@ -123,21 +123,21 @@ const TransactionRow = memo(({
           <TableCell colSpan={7} className="p-0 border-b border-white/5 relative">
             <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gradient-to-b from-white/5 to-transparent"></div>
             <div className="border-l-2 border-dashed border-zinc-700/50 ml-11 pl-8 py-6 my-2">
-               {tx.transfer_details && (
+               {tx.transfer_details && (tx.transfer_details.bank || tx.transfer_details.account_number || tx.transfer_details.recipient_name) && (
                  <div className="mb-6">
                    <h4 className="text-xs font-semibold text-zinc-500/80 mb-3 uppercase tracking-[0.2em]">Transfer Details</h4>
                    <div className="space-y-2.5 max-w-2xl bg-white/[0.02] p-4 rounded-xl border border-white/5">
                      <div className="flex justify-between items-center text-sm">
                        <span className="text-zinc-500">Bank</span>
-                       <span className="font-medium text-zinc-300">{tx.transfer_details.bank}</span>
+                       <span className="font-medium text-zinc-300">{tx.transfer_details.bank || '-'}</span>
                      </div>
                      <div className="flex justify-between items-center text-sm">
                        <span className="text-zinc-500">Account Number</span>
-                       <span className="font-medium text-zinc-300 tracking-wider">{tx.transfer_details.account_number}</span>
+                       <span className="font-medium text-zinc-300 tracking-wider">{tx.transfer_details.account_number || '-'}</span>
                      </div>
                      <div className="flex justify-between items-center text-sm">
                        <span className="text-zinc-500">Recipient Name</span>
-                       <span className="font-medium text-zinc-300 uppercase">{tx.transfer_details.recipient_name}</span>
+                       <span className="font-medium text-zinc-300 uppercase">{tx.transfer_details.recipient_name || '-'}</span>
                      </div>
                    </div>
                  </div>
