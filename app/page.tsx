@@ -92,7 +92,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setMounted(true);
-    fetch('/api/dashboard-data')
+    fetch('/api/dashboard-data?limit=5')
       .then(res => res.json())
       .then(data => {
         if (data.wallets) setWallets(data.wallets);

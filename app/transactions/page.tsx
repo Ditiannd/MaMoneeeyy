@@ -242,7 +242,7 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     setMounted(true);
-    fetch('/api/dashboard-data')
+    fetch('/api/dashboard-data?limit=20')
       .then(res => res.json())
       .then(data => {
         if (data.wallets) setWallets(data.wallets);

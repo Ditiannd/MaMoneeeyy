@@ -5,8 +5,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
+
     // Fetch wallets and recent transactions concurrently
     const [walletsResult, txResult] = await Promise.all([
       supabase
@@ -17,7 +20,7 @@ export async function GET() {
         .from('transactions')
         .select('id, wallet_id, type, amount, merchant_name, category, transaction_date, receipt_url, wallets(name)')
         .order('transaction_date', { ascending: false })
-        .limit(50)
+        .limit(limit)
     ]);
 
     if (walletsResult.error) throw new Error(walletsResult.error.message);
