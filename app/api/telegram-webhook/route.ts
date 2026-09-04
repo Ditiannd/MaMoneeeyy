@@ -356,7 +356,19 @@ export async function POST(req: Request) {
         } else if (textCmd === '/switch') {
           const newType = lastTx.type === 'income' ? 'expense' : 'income';
           await supabase.from('transactions').update({ type: newType }).eq('id', lastTx.id);
-          await sendMessage(chatId, `✅ Status transaksi "${lastTx.merchant_name}" berhasil dibalik menjadi ${newType.toUpperCase()}.`);
+          
+          const { data: allTxs } = await supabase.from('transactions').select('amount, type').eq('wallet_id', lastTx.wallet_id);
+          const newBalance = (allTxs || []).reduce((acc, tx) => {
+            return tx.type === 'income' ? acc + Number(tx.amount) : acc - Number(tx.amount);
+          }, 0);
+          
+          await supabase.from('wallets').update({ current_balance: newBalance }).eq('id', lastTx.wallet_id);
+          
+          const { data: walletRow } = await supabase.from('wallets').select('name').eq('id', lastTx.wallet_id).single();
+          const walletName = walletRow?.name || 'Unknown';
+          
+          const message = `✅ Status transaksi "${lastTx.merchant_name}" diubah menjadi ${newType === 'income' ? 'Income 📈' : 'Expense 📉'}.\nDompet: ${walletName}\nSaldo Baru: Rp ${newBalance.toLocaleString('id-ID')}`;
+          await sendMessage(chatId, message);
         }
         return ok();
       }
