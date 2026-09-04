@@ -188,7 +188,7 @@ Classify the transaction into strictly ONE of the allowed category strings above
 
 If you cannot determine the date, use today: ${new Date().toISOString().split('T')[0]}.
 
-CRITICAL RULE FOR TRANSACTION TYPE: You must look for a plus sign (+) next to the amount or keywords like 'Isi Saldo', 'Top Up', or 'Terima Dana'. If ANY of these are present, you ABSOLUTELY MUST set the 'type' to 'income'. Defaulting to 'expense' for top-ups is a critical failure.\`;
+CRITICAL RULE FOR TRANSACTION TYPE: You must look for a plus sign (+) next to the amount or keywords like 'Isi Saldo', 'Top Up', or 'Terima Dana'. If ANY of these are present, you ABSOLUTELY MUST set the 'type' to 'income'. Defaulting to 'expense' for top-ups is a critical failure.`;
 
 async function executeWithFallback(
   modelChain: string[],
@@ -217,7 +217,7 @@ async function executeWithFallback(
       }
       return await model.generateContent(parts);
     } catch (err: any) {
-      console.warn(`[Fallback] ${currentModel} failed, trying next...`);
+      console.warn("[Fallback] " + currentModel + " failed, trying next...");
       console.error('[Model Error Details]:', err.message);
       lastError = err;
     }
