@@ -87,16 +87,20 @@ async function editMessageText(
   chatId: number,
   messageId: number,
   text: string,
+  replyMarkup?: object
 ) {
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: 'Markdown',
+  };
+  if (replyMarkup) payload.reply_markup = replyMarkup;
+
   await fetch(`${TELEGRAM_API}/editMessageText`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      message_id: messageId,
-      text,
-      parse_mode: 'Markdown',
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -111,7 +115,17 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   });
 }
 
-async function fetchTelegramFile(fileId: string): Promise<Buffer> {
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function fetchTelegramFile(fileId: string): Promise<ArrayBuffer> {
   const res = await fetch(`${TELEGRAM_API}/getFile?file_id=${fileId}`);
   const json = await res.json();
   const filePath: string = json.result.file_path;
@@ -119,8 +133,7 @@ async function fetchTelegramFile(fileId: string): Promise<Buffer> {
   const download = await fetch(
     `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`,
   );
-  const arrayBuffer = await download.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return await download.arrayBuffer();
 }
 
 // =============================================================================
@@ -167,7 +180,7 @@ If you cannot determine the date, use today: ${new Date().toISOString().split('T
 async function executeWithFallback(
   modelChain: string[],
   prompt: string,
-  imageBuffer?: Buffer
+  imageBuffer?: ArrayBuffer
 ) {
   let lastError: unknown;
   for (const currentModel of modelChain) {
@@ -184,7 +197,7 @@ async function executeWithFallback(
       if (imageBuffer) {
         parts.push({
           inlineData: {
-            data: imageBuffer.toString('base64'),
+            data: arrayBufferToBase64(imageBuffer),
             mimeType: 'image/jpeg',
           },
         });
@@ -201,7 +214,7 @@ async function executeWithFallback(
 
 async function extractWithGemini(
   textInput?: string,
-  imageBuffer?: Buffer,
+  imageBuffer?: ArrayBuffer,
 ): Promise<PendingTransaction> {
   let prompt = EXTRACTION_PROMPT;
   if (!imageBuffer && textInput) {
@@ -510,7 +523,9 @@ export async function POST(req: Request) {
       const isIncome = message.text.startsWith('/in ');
       const textInput = message.text.replace(isIncome ? '/in ' : '/out ', '');
       
-      await sendMessage(chatId, '⏳ Sedang memproses transaksi...');
+      const loadingMsg = await sendMessage(chatId, '⏳ Sedang memproses transaksi...');
+      const loadingMsgId = loadingMsg.result?.message_id;
+      if (!loadingMsgId) return ok(); // Failsafe
       
       const { data: wallets } = await supabase
         .from('wallets')
@@ -518,7 +533,7 @@ export async function POST(req: Request) {
         .order('created_at', { ascending: true });
 
       if (!wallets || wallets.length === 0) {
-        await sendMessage(chatId, '⚠️ Tidak ada dompet yang tersedia. Tambahkan dompet di Dashboard terlebih dahulu.');
+        await editMessageText(chatId, loadingMsgId, '⚠️ Tidak ada dompet yang tersedia. Tambahkan dompet di Dashboard terlebih dahulu.');
         return ok();
       }
 
@@ -554,13 +569,11 @@ export async function POST(req: Request) {
           `*Tipe:* ${extractedNLP.type === 'income' ? '📈' : '📉'} ${extractedNLP.type}\n\n` +
           `Pilih dompet sumber dana:`;
 
-        const sentMsg = await sendMessage(chatId, confirmMsg, {
+        await editMessageText(chatId, loadingMsgId, confirmMsg, {
           inline_keyboard: inlineKeyboard,
         });
         
-        if (sentMsg && sentMsg.ok) {
-          pendingTransactions.set(sentMsg.result.message_id.toString(), extractedNLP);
-        }
+        pendingTransactions.set(loadingMsgId.toString(), extractedNLP);
         
         return ok();
       }
@@ -578,7 +591,7 @@ export async function POST(req: Request) {
 
       if (insertErr) {
         console.error('Transaction insert error:', insertErr);
-        await sendMessage(chatId, `❌ Gagal menyimpan transaksi: ${insertErr.message}`);
+        await editMessageText(chatId, loadingMsgId, `❌ Gagal menyimpan transaksi: ${insertErr.message}`);
         return ok();
       }
 
@@ -605,7 +618,7 @@ export async function POST(req: Request) {
         `*Dompet:* ${targetWallet.name}\n` +
         `*Saldo Baru:* ${fmtRp(newBalance)}`;
 
-      await sendMessage(chatId, confirmMsg);
+      await editMessageText(chatId, loadingMsgId, confirmMsg);
       
       return ok();
     }
@@ -816,10 +829,13 @@ export async function POST(req: Request) {
     // BRANCH A — Standard input (Photo or Text → Gemini extraction)
     // =========================================================================
     let extracted: PendingTransaction | null = null;
+    let loadingMsgId: number | null = null;
 
     if (message.photo && message.photo.length > 0) {
       // --- Photo workflow ---
-      await sendMessage(chatId, '⏳ Sedang memproses gambar...');
+      const loadingMsg = await sendMessage(chatId, '⏳ Sedang memproses gambar...');
+      loadingMsgId = loadingMsg.result?.message_id;
+      if (!loadingMsgId) return ok(); // Failsafe
 
       const photo = message.photo[message.photo.length - 1]; // highest resolution
       const imageBuffer = await fetchTelegramFile(photo.file_id);
@@ -838,12 +854,15 @@ export async function POST(req: Request) {
       extracted = await extractWithGemini(undefined, imageBuffer);
     } else if (message.text) {
       // --- Text workflow ---
-      await sendMessage(chatId, '⏳ Sedang mengekstrak data...');
+      const loadingMsg = await sendMessage(chatId, '⏳ Sedang mengekstrak data...');
+      loadingMsgId = loadingMsg.result?.message_id;
+      if (!loadingMsgId) return ok(); // Failsafe
+      
       extracted = await extractWithGemini(message.text);
     }
 
     if (!extracted) {
-      await sendMessage(chatId, '⚠️ Maaf, gagal mengekstrak data dari input.');
+      await editMessageText(chatId, loadingMsgId!, '⚠️ Maaf, gagal mengekstrak data dari input.');
       return ok();
     }
 
@@ -854,10 +873,7 @@ export async function POST(req: Request) {
       .order('created_at', { ascending: true });
 
     if (!wallets || wallets.length === 0) {
-      await sendMessage(
-        chatId,
-        '⚠️ Tidak ada dompet yang tersedia. Tambahkan dompet di Dashboard.',
-      );
+      await editMessageText(chatId, loadingMsgId!, '⚠️ Tidak ada dompet yang tersedia. Tambahkan dompet di Dashboard.');
       return ok();
     }
 
@@ -877,14 +893,12 @@ export async function POST(req: Request) {
       `*Tanggal:* ${extracted.date}\n\n` +
       `Pilih dompet sumber dana:`;
 
-    const sentMsg = await sendMessage(chatId, confirmMsg, {
+    await editMessageText(chatId, loadingMsgId!, confirmMsg, {
       inline_keyboard: inlineKeyboard,
     });
     
     // Store extracted data server-side keyed by the message ID of the bot's reply
-    if (sentMsg && sentMsg.ok) {
-      pendingTransactions.set(sentMsg.result.message_id.toString(), extracted);
-    }
+    pendingTransactions.set(loadingMsgId!.toString(), extracted);
 
     return ok();
   } catch (error: unknown) {
