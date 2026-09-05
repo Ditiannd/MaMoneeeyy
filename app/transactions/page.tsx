@@ -317,7 +317,7 @@ export default function TransactionsPage() {
   if (!mounted) return null;
 
   return (
-    <main className="w-full max-w-6xl mx-auto flex-1 overflow-y-auto p-8 z-10 scrollbar-hide">
+    <main className="w-full max-w-6xl mx-auto flex-1 overflow-y-auto p-4 md:p-8 z-10 scrollbar-hide">
       <header className="mb-8">
         <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">All Transactions</h2>
         <p className="text-zinc-400 text-sm mt-1">Review, search, and filter your complete financial history.</p>
@@ -375,7 +375,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Transactions Table */}
-      <div className="bg-white/5 backdrop-blur-2xl border border-white/10 shadow-2xl overflow-hidden px-6 sm:px-8 py-4 rounded-3xl">
+      <div className="bg-white/5 backdrop-blur-2xl border border-white/10 shadow-2xl overflow-x-auto px-4 md:px-6 sm:px-8 py-4 rounded-3xl">
         <Table>
           <TableHeader className="bg-white/5">
             <TableRow className="border-white/10 hover:bg-transparent">

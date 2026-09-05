@@ -38,7 +38,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-[20%] min-w-[240px] border-r border-white/10 bg-zinc-900/30 backdrop-blur-3xl flex flex-col justify-between p-6 z-10 relative">
+    <aside className="hidden md:flex w-[20%] min-w-[240px] border-r border-white/10 bg-zinc-900/30 backdrop-blur-3xl flex-col justify-between p-6 z-10 relative">
       <div>
         <div className="flex items-center gap-3 mb-12 px-2">
           <div className="p-1.5 bg-emerald-500 rounded-lg shadow-lg shadow-emerald-500/20">

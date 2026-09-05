@@ -172,7 +172,7 @@ export default function Dashboard() {
   return (
     <>
       {/* CENTER COLUMN (55%) */}
-      <main className="w-[55%] flex-1 overflow-y-auto p-8 z-10 scrollbar-hide">
+      <main className="w-full md:w-[55%] flex-1 overflow-y-auto p-4 md:p-8 z-10 scrollbar-hide">
         <header className="mb-8 flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">Financial Overview</h2>
@@ -182,7 +182,7 @@ export default function Dashboard() {
         </header>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-5 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
           <div className={`${darkCard} p-5`}>
             <p className="text-xs font-medium text-zinc-400 mb-2">Total Balance</p>
             <div className="text-xl font-bold text-zinc-100 mb-2">Rp {totalBalance.toLocaleString('id-ID')}</div>
@@ -248,7 +248,7 @@ export default function Dashboard() {
               ? `Recent Transactions - ${wallets.find(w => w.id === selectedWalletId)?.name || 'Wallet'}` 
               : 'Recent Transactions - All Wallets'}
           </h3>
-          <div className={`${darkCard} overflow-hidden`}>
+          <div className={`${darkCard} overflow-x-auto`}>
             <Table>
               <TableHeader className="bg-white/5">
                 <TableRow className="border-white/10 hover:bg-transparent">
@@ -314,7 +314,7 @@ export default function Dashboard() {
       </main>
 
       {/* RIGHT COLUMN (25%) */}
-      <aside className="w-[25%] min-w-[280px] border-l border-white/10 bg-zinc-900/30 backdrop-blur-3xl p-8 overflow-y-auto scrollbar-hide z-10">
+      <aside className="w-full md:w-[25%] md:min-w-[280px] border-t md:border-t-0 border-l-0 md:border-l border-white/10 bg-zinc-900/30 backdrop-blur-3xl p-4 md:p-8 overflow-y-auto scrollbar-hide z-10">
         
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-sm font-bold text-zinc-100">My Wallets</h3>
